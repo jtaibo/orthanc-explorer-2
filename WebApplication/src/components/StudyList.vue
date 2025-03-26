@@ -24,7 +24,7 @@ const Status = Object.freeze({
 });
 
 
-document._allowedFilters = ["StudyDate", "StudyTime", "AccessionNumber", "PatientID", "PatientName", "PatientBirthDate", "StudyInstanceUID", "StudyID", "StudyDescription", "ModalitiesInStudy", "labels"]
+document._allowedFilters = ["StudyDate", "StudyTime", "AccessionNumber", "PatientID", "PatientSex", "PatientName", "PatientBirthDate", "StudyInstanceUID", "StudyID", "StudyDescription", "ModalitiesInStudy", "labels"]
 
 document._studyColumns = {
     "StudyDate": {
@@ -39,6 +39,11 @@ document._studyColumns = {
     "PatientID": {
         "width": "11%",
         "placeholder": "1234",
+        "isOrderable": true
+    },
+    "PatientSex": {
+        "width": "4%",
+        "placeholder": "F/M",
         "isOrderable": true
     },
     "PatientName": {

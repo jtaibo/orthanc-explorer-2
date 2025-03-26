@@ -67,12 +67,19 @@ export default {
                     :title="columnTooltip('SeriesNumber')"
                     >{{columnTitle('SeriesNumber')}}</th>
                 <th
-                width="40%"
+                width="30%"
                 scope="col"
                 class="series-table-header cut-text"
                 data-bs-toggle="tooltip"
                 :title="columnTooltip('SeriesDescription')"
                 >{{columnTitle('SeriesDescription')}}</th>
+                <th
+                width="10%"
+                scope="col"
+                class="series-table-header cut-text"
+                data-bs-toggle="tooltip"
+                :title="columnTooltip('BodyPartExamined')"
+                >{{columnTitle('BodyPartExamined')}}</th>
                 <th
                 width="11%"
                 scope="col"
