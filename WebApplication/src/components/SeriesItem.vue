@@ -83,6 +83,11 @@ export default {
                 class="cut-text text-center"
                 data-bs-toggle="collapse"
                 v-bind:data-bs-target="'#series-details-' + this.seriesId"
+            >{{ seriesInfo.MainDicomTags.BodyPartExamined }}</td>
+            <td
+                class="cut-text text-center"
+                data-bs-toggle="collapse"
+                v-bind:data-bs-target="'#series-details-' + this.seriesId"
             >{{ seriesInfo.MainDicomTags.Modality }}</td>
             <td
                 class="cut-text text-center"
