@@ -8,7 +8,7 @@ import api from "../orthancApi"
 
 
 export default {
-    props: ["resourcesOrthancId", "linkUrl", "level", "tokenType", "validityDuration", "title", "iconClass", "opensInNewTab", "linkType", "disabled"],
+    props: ["resourcesOrthancId", "linkUrl", "level", "tokenType", "validityDuration", "title", "iconClass", "opensInNewTab", "linkType", "disabled", "smallIcons"],
     setup() {
         return {
         }
@@ -28,27 +28,41 @@ export default {
                 return;
             }
 
-            if (!this.tokens.RequiredForLinks) {
+            if (!this.tokens.RequiredForLinks && !this.advancedOptions.InstantLinksReuseTokenFromUri) {
                 return;  // just execute the default click handler: no token in url, no HTTP headers
             }
             event.preventDefault();
-            let validityDuration = this.validityDuration;
-            if (validityDuration == null || validityDuration === undefined) {
-                validityDuration = this.tokens.InstantLinksValidity;
-            }
-            let level = this.level;
-            if (level == "bulk-study") {
-                level = "study";
+
+            let token = null;
+            if (!this.tokens.RequiredForLinks && this.advancedOptions.InstantLinksReuseTokenFromUri) {
+                token = {
+                    "Token": localStorage.getItem(this.advancedOptions.InstantLinksReuseTokenFromUri)
+                };
+                console.log("reusing token from uri: ", this.advancedOptions.InstantLinksReuseTokenFromUri, token["Token"]);
+            } else {
+                // generate a token through the auth-plugin & auth-service
+                let validityDuration = this.validityDuration;
+                if (validityDuration == null || validityDuration === undefined) {
+                    validityDuration = this.tokens.InstantLinksValidity;
+                }
+                let level = this.level;
+                if (level == "bulk-study") {
+                    level = "study";
+                }
+
+                token = await api.createToken({ tokenType: this.tokenType, resourcesIds: this.resourcesOrthancId, level: level, validityDuration: validityDuration });
             }
 
-            let token = await api.createToken({ tokenType: this.tokenType, resourcesIds: this.resourcesOrthancId, level: level, validityDuration: validityDuration });
             let finalUrl = this.linkUrl;
 
             // give priority to the urls coming from the token service
             if (token["Url"] != null) {
                 finalUrl = token["Url"];
             }
-            else if (this.linkUrl.indexOf('?') == -1) {
+            else if (finalUrl.startsWith("weasis:")) {
+                const extraParts = ["-H", `"Authorization: Bearer ${token["Token"]}"`];
+                finalUrl = finalUrl + "+" + extraParts.map(v => encodeURIComponent(v)).join("+");
+            } else if (finalUrl.indexOf('?') == -1) {
                 finalUrl = finalUrl + "?token=" + token["Token"];
             } else {
                 finalUrl = finalUrl + "&token=" + token["Token"];
@@ -88,11 +102,19 @@ export default {
             return this.linkType == "icon";
         },
         classes() {
+            let c = ["btn-secondary"];
+
             if (this.disabled) {
-                return "btn-secondary disabled-link";
-            } else {
-                return "btn-secondary";
+                c.push("disabled-link");
             }
+
+            if (this.smallIcons) {
+                c.push("btn-icon-small");
+            } else {
+                c.push("btn-icon");
+            }
+
+            return c.join(" ");
         },
         divClasses() {
             if (this.linkType == "icon") {

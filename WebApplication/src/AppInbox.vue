@@ -1,21 +1,21 @@
 <script>
 import api from "./orthancApi"
-import TokenLanding from "./components/TokenLanding.vue";
+import Inbox from "./components/Inbox.vue";
 
 export default {
     async created() {
-        console.log("Creating Landing App...");
+        console.log("Creating Inbox App...");
         await this.$store.dispatch('configuration/load');
-        console.log("Landing App created");
+        console.log("Inbox App created");
     },
-    components: { TokenLanding }
+    components: { Inbox }
 }
 </script>
 
 <template>
     <div class="full-page">
-        <TokenLanding>
-        </TokenLanding>
+        <Inbox>
+        </Inbox>
     </div>
 </template>
 

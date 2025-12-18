@@ -1,10 +1,136 @@
-Pending changes (not released yet)
-==================================
+Pending changes
+===============
+
+Changes:
+- Added "export to NIfTI" button for 3D series and instances.
+- New configuration "AdvancedOptions.InstantLinksReuseTokenFromUri" to 
+  re-use an OE2 query argument when opening a viewer or downloading a resource.
+
+Fixes:
+- Fix [missing fields when browsing remote DICOMweb servers at series level](https://discourse.orthanc-server.org/t/dicom-web-client-not-requesting-all-tags-it-intends-to-display/6348)
+- Fix #95 [DICOMweb: Instance retrieve sends wrong WADO-RS request](https://github.com/orthanc-server/orthanc-explorer-2/issues/95)
+- Fix #94 [Displaced columns and fields in UI](https://github.com/orthanc-server/orthanc-explorer-2/issues/94)
+
+
+1.10.1 (2025-11-20)
+==================
+
+Changes:
+- When the [new worklists plugin](https://orthanc.uclouvain.be/book/plugins/worklists-plugin-new.html) is installed:
+  Added a worklists menu to view, edit and delete Modality worklists.
+  This is available only if the Worklists plugin is enabled.
+  - New configuration "NewWorklistDefaultTags" to define the tags to display in
+    the UI to create a worklist and their default values.
+  - 
+- Added a new button to open a study in Weasis provided that:
+  - the "UiOptions.EnableOpenInWeasisViewer" configuration is set to true
+  - the DICOMWeb plugin is installed
+  - Weasis is installed on your PC
+
+Fixes:
+- Fix the remote Study List layout.
+- Fix [browsing remote DICOMweb servers](https://discourse.orthanc-server.org/t/qido-rs-series-query-uses-undefined-study-uid-in-explorer2/6317).
+
+
+1.9.4 (2025-10-03)
+==================
+
+Fixes:
+- Fix the Study List layout.
+
+
+1.9.3 (2025-10-02)
+==================
+
+Fixes:
+- Fix the Study List headers alignment.
+
+
+1.9.2 (2025-10-01)
+==================
+
+Changes:
+- Added support for STL viewer (at instance level, provided that the STL plugin is installed)
+- Added custom buttons applicable to multiple studies:
+  - In the configuration `CustomButtons`, there is now a new entry `bulk-studies`.
+  - New keywords in the configuration to define `CustomButtons`:
+    - `{CommaSeparatedUUIDs}` & `{CommaSeparatedDicomIds}`
+    - `{studies-resource-token/download-instant-link}`, `{studies-resource-token/viewer-instant-link}` & `{studies-resource-token/meddream-instant-link}`
+    - `{JsonArrayUUIDs}` & `{JsonArrayDicomIds}`
+- New `StartMessage` configuration in `CustomButtons` to display a toast message
+  when the custom action starts.
+
+Fixes:
+- Removed the horizontal scroll bar when adding new columns in `StudyListColumns`.
+- Fixed display of `PatientSex` when added in `StudyListColumns`.
+- Re-enabled `"StudyListContentIfNoSearch": "empty"`
+- Fix [#29](https://github.com/orthanc-server/orthanc-auth-service/issues/29):
+  It is now possible to filter studies against a custom column.  Sorting against a custom column
+  is also possible for a few DICOM Tags: `PatientSex`, `OtherPatientIDs`, `InstitutionName`,
+  `ReferringPhysician`,  `RequestingPhysician`,  `ManufacturerModelName`.
+
+
+1.9.1 (2025-09-09)
+==================
+
+Changes:
+- Added Japanese translations.
+- new advanced configuration `AdvancedOptions.AdaptUiOnReadOnlySystems` that you can set to false
+  to keep all UI features enabled on ReadOnly systems.
+
+Fixes:
+- Fix [#34](https://github.com/orthanc-server/orthanc-auth-service/issues/34): 
+  Added a language picker in the token landing page + use the `UiOptions.DefaultLanguage` configuration.
+- Now displaying the VisitComments tag in the study details even if it is longer than 256 characters (provided it 
+  is included in the `UiOptions.StudyMainTags` configuration)
+- Fix the MediaStorageSOPClassUID of STL files that are added to an existing study.
+- Stop logging the HTTP headers when redirecting from root (https://discourse.orthanc-server.org/t/orthanc-explorer-2-error-logs-upon-redirection-to-new-ui/6232)
+- Fix issue when changing only the casing of the PatientID (https://discourse.orthanc-server.org/t/possible-bug-when-changing-casings-in-patientid-using-explorer2/6124)
+
+
+1.9.0 (2025-08-13)
+==================
+
+Changes:
+- Implemented a new /ui/app/inbox.html route to upload and possibly process files
+  during upload thanks to a custom python plugin.  
+  Check the "Inbox" configuration for documentation.
+- Added support to display audit-logs (provided that they are enabled in the
+  authorization plugin and that you are using a PostgreSQL DB).
+
+Fixes:
+- Quick viewer button did not work if medDream was the only configured viewer and
+  if ViewersOrdering had the default value.
+
+
+1.8.5 (2025-06-17)
+==================
+
+Changes:
+- Now showing the number of files processed in the upload progress bar.
+- Now showing the Advanced Storage plugin in the plugins list.
+
+
+1.8.4 (2025-06-11)
+==================
+
+Changes:
+  - New configuration "Tokens.LandingOptions": when opening a share link, this option enables
+    the display of a landing page with, e.g., a download button, a button to open the study in
+    the viewer and, optionally, a custom button.
+  - added Portuguese translations thanks to Rafael Souza.
+
+Fixes:
+  - Fix custom logo in the SideBar that was not displayed anymore.
+
+
+1.8.3 (2025-04-07)
+==================
 
 Changes:
   - New "multi label" search field.  Since it consumes space in the study list header,
     it is disabled by default and can be enabled with the new configuration "UiOptions.EnableMultiLabelsSearch"
-  - Custom buttons: new `"{study-resource-token/download-instant-link}"` keyword
+  - Custom buttons: new keyword: `"{study-resource-token/download-instant-link}"`
     e.g: `"Url": "../../series/{UUID}/archive?token={study-resource-token/download-instant-link}"`
   - added Vietnamese translations thanks to Khanhhcmut.
   - added Arabic translations thanks to Ibrahim Mohamed.

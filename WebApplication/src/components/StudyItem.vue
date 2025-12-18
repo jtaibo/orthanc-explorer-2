@@ -164,23 +164,39 @@ export default {
                 return seriesCount;
             }
         },
+        hasPdfReportIconColumn() {
+            return this.studiesSourceType == SourceType.LOCAL_ORTHANC && this.uiOptions.EnableReportQuickButton;
+        },
         hasPdfReportIconPlaceholder() {
-            return this.studiesSourceType == SourceType.LOCAL_ORTHANC && this.uiOptions.EnableReportQuickButton && !this.hasPdfReportIcon;
+            return this.hasPdfReportIconColumn && !this.hasPdfReportIcon;
         },
         hasPdfReportIcon() {
             return this.study.RequestedTags.SOPClassesInStudy && this.study.RequestedTags.SOPClassesInStudy.indexOf("1.2.840.10008.5.1.4.1.1.104.1") != -1 && this.uiOptions.EnableReportQuickButton;
         },
+        hasPrimaryViewerColumn() {
+            return this.studiesSourceType == SourceType.LOCAL_ORTHANC && this.uiOptions.EnableViewerQuickButton;
+        },
         hasPrimaryViewerIconPlaceholder() {
-            return this.studiesSourceType == SourceType.LOCAL_ORTHANC && this.uiOptions.EnableViewerQuickButton && !this.hasPrimaryViewerIcon;
+            return this.hasPrimaryViewerColumn && !this.hasPrimaryViewerIcon;
         },
         hasPrimaryViewerIcon() {
-            return this.studiesSourceType == SourceType.LOCAL_ORTHANC && this.primaryViewerUrl && this.uiOptions.EnableViewerQuickButton;
+            return this.hasPrimaryViewerColumn && this.primaryViewerUrl;
         },
         primaryViewerUrl() {
             return resourceHelpers.getPrimaryViewerUrl("study", this.study.ID, this.study.MainDicomTags.StudyInstanceUID);
         },
         primaryViewerTokenType() {
             return resourceHelpers.getPrimaryViewerTokenType();
+        },
+        colSpanStudyDetails() {
+            let span = this.uiOptions.StudyListColumns.length + 1; // +1 for the 'checkbox'
+            if (this.hasPrimaryViewerColumn) {
+                span++;
+            }
+            if (this.hasPdfReportIconColumn) {
+                span++;
+            }
+            return span;
         }
     },
     components: { SeriesList, StudyDetails, TokenLinkButton }
@@ -190,7 +206,7 @@ export default {
 
 <template>
     <tbody>
-        <tr v-if="loaded" :class="{ 'study-row-collapsed': !expanded, 'study-row-expanded': expanded, 'study-row-show-labels': showLabels }" @dblclick="doubleClicked">
+        <tr v-if="loaded" :class="{ 'study-row-collapsed': !expanded, 'study-row-expanded': expanded, 'study-row-show-labels': showLabels }">
             <td>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" v-model="selected" @click="clickedSelect">
@@ -259,15 +275,17 @@ export default {
         </tr>
         <tr v-show="showLabels">
             <td></td>
-            <td colspan="100%" class="label-row">
+            <td v-if="hasPrimaryViewerColumn"></td>
+            <td v-if="hasPdfReportIconColumn"></td>
+            <td :colspan="uiOptions.StudyListColumns.length" class="label-row">
                 <span v-for="label in study.Labels" :key="label" class="label badge">{{ label }}</span>
                 <span v-if="!hasLabels">&nbsp;</span>
             </td>
         </tr>
         <tr v-show="loaded" class="collapse"
-            :class="{ 'study-details-collapsed': !expanded, 'study-details-expanded': expanded }"
+            :class="{ 'study-details-expanded': expanded }"
             v-bind:id="'study-details-' + this.studyId" ref="study-collapsible-details">
-            <td v-if="loaded && expanded" colspan="100">
+            <td v-if="loaded && expanded" :colspan="colSpanStudyDetails">
                 <StudyDetails :studyId="this.studyId" :studyMainDicomTags="this.study.MainDicomTags"
                     :patientMainDicomTags="this.study.PatientMainDicomTags" :labels="this.study.Labels" @deletedStudy="onDeletedStudy"></StudyDetails>
             </td>

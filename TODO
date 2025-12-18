@@ -1,3 +1,11 @@
+"Easy" stuffs - requested by community:
+--------------------------------------
+
+- Add keycloak username in a custom plugin url or payload (https://discourse.orthanc-server.org/t/get-keycloak-user-in-a-custom-plugin/6323/3).
+- When transfering a study to DICOM/peer/DicomWeb, report the number of transmitted files in the progress bar (same as in upload) (Jacob)
+
+-----------
+
 - add a "reset" button (on Windows, to reload the config after you have changed it without going to the Services -> Orthanc -> Restart)
 - show ohif-vr and ohif-tmtv buttons only when relevant (analyse the content of the study)
 
@@ -19,9 +27,13 @@ UI improvements:
   - show the list of /tools/accepted-transfer-syntaxes
   - show the list of /tools/accepted-sop-classes (in 1.12.6)
 
+- Add a PDF/Image dicomization (https://discourse.orthanc-server.org/t/orthanc-explorer-2-dicomization-feature-suggestion/6061/4).
+  Not to attach a new series to an existing study but to create a new study.
+
+- worklist page: suggest auto-incremented AccessionNumber (https://discourse.orthanc-server.org/t/new-worklists-plugin-oe2-1-10-0/6322/2)
+
 - show attachments
 
-- support neuro plugin (download nifti)
 
 - TagsTree: allow click on "null" tags to open /instances/../content/group,element in new window
 

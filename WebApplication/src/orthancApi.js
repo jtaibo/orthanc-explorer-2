@@ -182,10 +182,17 @@ export default {
         return response.data;
     },
     async findPatient(patientId) {
-        const response = (await axios.post(orthancApiUrl + "tools/lookup", patientId));
+        // note: we don't use tools/lookup since it is case insensitive ! https://discourse.orthanc-server.org/t/possible-bug-when-changing-casings-in-patientid-using-explorer2/6124
+        const response = (await axios.post(orthancApiUrl + "tools/find", {
+            "Level": "Patient",
+            "Expand": true,
+            "CaseSensitive": true,
+            "Query": {
+                "PatientID": patientId
+            }
+        }));
         if (response.data.length == 1) {
-            const patient = (await axios.get(orthancApiUrl + "patients/" + response.data[0]['ID']));
-            return patient.data;
+            return response.data[0];
         } else {
             return null;
         }
@@ -383,8 +390,8 @@ export default {
         const response = (await axios.post(orthancApiUrl + "tools/find", payload));
         return response.data;
     },
-    async getStudyInstances(orthancId) {
-        return (await axios.get(orthancApiUrl + "studies/" + orthancId + "/instances")).data;
+    async getStudyInstancesIds(orthancId) {
+        return (await axios.get(orthancApiUrl + "studies/" + orthancId + "/instances?expand=false")).data;
     },
     async getStudyInstancesExpanded(orthancId, requestedTags) {
         let url = orthancApiUrl + "studies/" + orthancId + "/instances?expanded";
@@ -411,7 +418,7 @@ export default {
         }
     },
     async getInstanceTags(orthancId) {
-        return (await axios.get(orthancApiUrl + "instances/" + orthancId + "/tags")).data;
+        return (await axios.get(orthancApiUrl + "instances/" + orthancId + "/tags?ignore-length=VisitComments")).data;
     },
     async getSimplifiedInstanceTags(orthancId) {
         return (await axios.get(orthancApiUrl + "instances/" + orthancId + "/tags?simplify")).data;
@@ -433,6 +440,9 @@ export default {
     },
     async getDelayedDeletionStatus() {
         return (await axios.get(orthancApiUrl + "plugins/delayed-deletion/status")).data;
+    },
+    async getAdvancedStorageStatus() {
+        return (await axios.get(orthancApiUrl + "plugins/advanced-storage/status")).data;
     },
     async getHousekeeperStatus() {
         return (await axios.get(orthancApiUrl + "plugins/housekeeper/status")).data;
@@ -616,6 +626,54 @@ export default {
 
         })
     },
+    async commitInbox(commitUrl, orthancStudiesIds, formFields) {
+        const response = (await axios.post(orthancApiUrl + commitUrl, {
+            "OrthancStudiesIds": orthancStudiesIds,
+            "FormFields": formFields
+        }))
+
+        return response.data;
+    },
+    async monitorInboxProcessing(monitorUrl, commitResponse) {
+        const response = (await axios.post(orthancApiUrl + monitorUrl, commitResponse))
+        return response.data;
+    },
+    async validateInboxForm(validationUrl, formFields) {
+        const response = (await axios.post(orthancApiUrl + validationUrl, {
+            "FormFields": formFields
+        }))
+
+        return response.data;
+    },
+    async getAuditLogs(filters, downloadAsCsv) {
+        const getArguments = new URLSearchParams();
+        if (filters) {
+            for (const [key, value] of Object.entries(filters)) {
+                getArguments.append(key, value);
+            }
+        }
+        
+        getArguments.append("log-data-format", "json");
+
+        if (downloadAsCsv) {
+            getArguments.append("format", "csv");
+            this.downloadFileWithAuthHeaders(orthancApiUrl + "auth/audit-logs?" + getArguments.toString());
+        } else {
+            return (await axios.get(orthancApiUrl + "auth/audit-logs?" + getArguments.toString())).data;
+        }
+    },
+    async getWorklists() {
+        return (await axios.get(orthancApiUrl + "worklists?format=Full")).data;
+    },
+    async deleteWorklist(worklistId) {
+        await axios.delete(orthancApiUrl + "worklists/" + worklistId);
+    },
+    async createWorklist(wlTags) {
+        return (await axios.post(orthancApiUrl + "worklists/create", {"Tags": wlTags})).data;
+    },
+    async updateWorklist(worklistId, wlTags) {
+        return (await axios.put(orthancApiUrl + "worklists/" + worklistId, {"Tags": wlTags})).data;
+    },
 
     ////////////////////////////////////////// HELPERS
     getOsimisViewerUrl(level, resourceOrthancId) {
@@ -632,6 +690,9 @@ export default {
         } else {
             return orthancApiUrl + 'volview/index.html?names=[archive.zip]&' + urls;
         }
+    },
+    getExportToNiftiUrl(level, resourceOrthancId) {
+        return orthancApiUrl + this.pluralizeResourceLevel(level) + '/' + resourceOrthancId + '/nifti';
     },
     getWsiViewerUrl(seriesOrthancId) {
         return orthancApiUrl + 'wsi/app/viewer.html?series=' + seriesOrthancId;
@@ -675,6 +736,21 @@ export default {
         } else {
             return null;
         }
+    },
+    getStlViewerUrl(orthancId) {
+        return orthancApiUrl + 'stl/app/o3dv.html?instance=' + orthancId;
+        // stl/app/o3dv.html
+        // stl/app/three.html
+    },
+   getWeasisViewerUrl(resourceDicomUid) {
+        const dicomWebRootUrl = new URL(orthancApiUrl + "dicom-web", window.location.origin);
+        const parts = ["$dicom:rs", "--url", `"${dicomWebRootUrl.toString()}"`, "-r", `"studyUID=${resourceDicomUid}"`];
+        const url = "weasis://?" + parts.map(v => encodeURIComponent(v)).join("+");
+        return url
+    },
+    getWeasisViewerUrlForBulkStudies(studiesDicomIds) {
+        const studyUids = studiesDicomIds.join(",");
+        return this.getWeasisViewerUrl(studyUids);
     },
     getInstancePreviewUrl(orthancId) {
         return orthancApiUrl + "instances/" + orthancId + "/preview";

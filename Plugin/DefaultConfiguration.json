@@ -45,7 +45,9 @@
             "EnableModification": true,                 // Enables the modify button
             "EnableSendTo": true,                       // Enables the 'SendTo' button for Studies/Series/Instances
             "EnableApiViewMenu": false,                 // Enables the API button to open API routes for Studies/Series/Instances (developer mode) 
+            "EnableWorklists": true,                    // Enables the Worklist menu (provided that the worklist plugin is enabled)
             "EnableSettings": true,                     // Enables the settings menu/interface
+            "EnableAuditLogs": true,                    // Enables the audit logs menu/interface (provided that the authorization plugin has audit logs enabled)
             "EnableLinkToLegacyUi": true,               // Enables a link to the legacy Orthanc UI
             "EnableChangePassword": true,               // Enables the 'change password' button in the side bar.  Only applicable if Keycloak is enabled
             "EnableViewerQuickButton": true,            // Enables a button in the study list to directly open a viewer
@@ -89,6 +91,8 @@
             "EnableOpenInMedDreamViewer": false,        // Enables a "open in MedDream viewer" button
             "MedDreamViewerPublicRoot" : "http://to-be-defined/",  // must end with a '/'.  e.g: "http://meddream.my.site/Viewer/" means that link to MedDream will look like http://meddream.my.site/?study=1.2.3.444.5555....
 
+            "EnableOpenInWeasisViewer": false,          // Enables a "open in Weasis viewer" button.  Note that the DICOMWeb plugin must be enabled.
+
             // Defines which icons is used by which enabled viewer.
             // Allowed keys: "meddream", "osimis-web-viewer", "stone-webviewer", "ohif", "ohif-vr", "ohif-tmtv"
             // Allowed values: CSS class that defines the viewer icons (only from bootstrap icons)
@@ -102,7 +106,9 @@
                 "ohif-micro": "fa-solid fa-microscope fa-button",
                 "meddream": "bi bi-columns-gap",
                 "volview": "bi bi-box",
-                "wsi": "fa-solid fa-microscope fa-button"
+                "wsi": "fa-solid fa-microscope fa-button",
+                "stl": "fa-solid fa-cubes",
+                "weasis": "bi bi-eye"
             },
             // Defines the order in which the viewer icons should appear in the interface
             // OHIF viewers modes that are not listed here, won't appear in the interface.
@@ -116,7 +122,9 @@
                 // "ohif-micro", // currently disabled, this is still experimental in OHIF
                 "meddream",
                 "volview",
-                "wsi"
+                "wsi",
+                "stl", // only at instance level
+                "weasis"
             ],
 
             "MaxStudiesDisplayed": 100,                 // The maximum number of studies displayed in the study list.
@@ -136,8 +144,7 @@
                                                                 // - "default-ordering" (new in 1.8.2) applies the "DefaultOrdering"
                                                                 // - "most-recents" (was the default value up to 1.8.1), equivalent to "DefaultOrdering"="Metadata,LastUpdate,DESC".
                                                                 //                  It is kept for compatibility reasons.  Note that the "DefaultOrdering" config is ignored if you use "most-recents".
-                                                                // - "empty" (From v 1.7.0 and when using a DB backend that supports ExtendedFind (SQLite and PostgreSQL), 
-                                                                //            the "empty" option is not used anymore and is replaced by "default-ordering")
+                                                                // - "empty"
 
             "DefaultOrdering": "Metadata,LastUpdate,DESC", // Defines the default ordering in the local study list.  Each order is made of 3 values separated by commas.
                                                            // Orders are separated by semicolons.  E.g:
@@ -175,7 +182,8 @@
             // The ordered list of columns to display in the study list.
             // Allowed values are:
             //  - Dicom Tags: "StudyDate", "AccessionNumber", "PatientID"
-            //                "PatientName", "PatientBirthDate", "StudyDescription"
+            //                "PatientName", "PatientBirthDate", "StudyDescription" 
+            //                or any other Study level MainDicomTags (or ExtraMainDicomTags)
             //  - special columns:
             //    - "modalities": the list of modalities in the study
             //    - "seriesCount": the number of series in the study
@@ -233,10 +241,88 @@
                 "CR", "CT", "DOC", "DR", "DX", "KO", "MG", "MR", "NM", "OT", "PR", "PT", "PX", "RTDOSE", "RTSTRUCT", "RTPLAN", "SEG", "SR", "US", "XA", "XC"
             ],
 
+            // The ordered list of columns to display in the worklists table.
+            // Allowed values are:
+            //  - Dicom Tags: "AccessionNumber", "PatientID"
+            //                "PatientName", "PatientBirthDate", "PatientSex"
+            //                or any other top level Tag from the Worklist
+            //  - special columns:
+            //    - "modalities": the list of modalities in the study
+            //    - "startDate": the first value of ScheduledProcedureStepStartDate
+            //    - "modalities": the concatenation of the Modality tags found in all ScheduledProcedureStepSequence
+            "WorklistsColumns" : [
+                "PatientBirthDate",
+                "PatientName",
+                "PatientID",
+                "startDate",
+                "description",
+                "modalities",
+                "AccessionNumber"
+            ],
+
+            // The initial list of tags that are displayed in the dialog to create a worklist.
+            // For each tag, you may define:
+            // - a "DefaultValue" field with a few keywords:
+            //      - $TODAY$
+            //      - $GENERATE_DICOM_UUID$
+            // - if it is "Required" to be filled or not (default = false)
+            // - if it is "Editable" (default = true)
+            // - if you want to offer "Choices" to select amongst
+            // - a "Placeholder" to display a suggestion text
+            "NewWorklistDefaultTags" : {
+                "PatientID": {
+                    "Required": true
+                },
+                "PatientBirthDate": {
+                },
+                "PatientName": {
+                    "Required": true
+                },
+                // other valid configurations for "PatientName" to split the encoding
+                // of the first name and last name in 2 separate fields:
+                // "PatientName": {
+                //     "Required": true,
+                //     "PatientNameType": "Computed",
+                //     "ComputedFrom": ["lastName", "firstName"] // allowed values: lastName, firstName, owner, animalName
+                // },
+                // "PatientName": {
+                //     "Required": true,
+                //     "PatientNameType": "Computed",
+                //     "ComputedFrom": ["owner", "animalName"] // allowed values: lastName, firstName, owner, animalName
+                // },
+                "PatientSex": {
+                    "Choices": ["F", "M", "U", "O"]
+                },
+                // "AccessionNumber": {},
+                "StudyInstanceUID": {
+                    "DefaultValue": "$GENERATE_DICOM_UUID$",
+                    "Editable": false
+                },
+                "InstitutionName": {
+                    // "DefaultValue": "My institution",
+                    // "Editable": false
+                },
+                "ScheduledProcedureStepSequence": {
+                    "DefaultValue": [
+                        {
+                            "ScheduledProcedureStepStartDate": {
+                                "DefaultValue": "$TODAY$",
+                                "Required": true
+                            },
+                            "Modality": {
+                                "Choices": ["CR", "CT", "DR", "DX", "MG", "MR", "OT", "PT", "US", "XA", "XC"]
+                            },
+                            "ScheduledProcedureStepDescription": {
+                            }
+                        }
+                    ]
+                }
+            },
+
             // Defines the list of languages available in the language picker
             // ex: "AvailableLanguages" : ["en", "fr"],
             // ex: "AvailableLanguages" : []  -> this won't show the language picker at all and force usage of the DefaultLanguage
-            "AvailableLanguages": ["en", "ar","de", "es", "fr", "it", "ka", "ro", "ru", "si", "uk", "vi", "zh"],
+            "AvailableLanguages": ["en", "ar", "de", "es", "fr", "it", "ja", "ka", "ro", "ru", "si", "uk", "vi", "zh", "pt"],
             
             // Force the default language.  If null (default), the language is the language from the visitor's browser.
             // ex: "DefaultLanguage" : "en"
@@ -294,7 +380,8 @@
             "CustomButtons": {
                 "study": [],
                 "instance": [],
-                "series": []
+                "series": [],
+                "bulk-studies": []
                 // For each button, you must provide the following items.
                 // Example for a GET button:
                 // {
@@ -303,10 +390,17 @@
                 //   "Tooltip": "Apply custom action to series",            // The tooltip displayed when hovering the button
                 //   "Target": "_blank",                                    // The HTML target for the link
                 //   "Icon": "bi bi-alarm",                                 // The CSS class that defines the button icon (only from bootstrap icons)
-                //   "Url": "http://localhost:3001/my-url?series={UUID}&patient={PatientID}"    // The template url.   DicomTag values are replaced in the template string. 
-                //                                                                              // {UUID} is the orthanc ID of the resource.
-                //                                                                              // {study-resource-token/download-instant-link} is replaced by a token that is valid to download the study (if tokens authentication is enabled)
-                //                                                                              // {study-resource-token/viewer-instant-link}, {study-resource-token/meddream-instant-link}
+                //   "Url": "http://localhost:3001/my-url?series={UUID}&patient={PatientID}"    // The template url.
+                //                                                                              // For "study", "instance" & "series" level:
+                //                                                                              //   {DicomTag} values are replaced in the template string. 
+                //                                                                              //   {UUID} is the orthanc ID of the resource.
+                //                                                                              //   {study-resource-token/download-instant-link} is replaced by a token that is valid to download the study (if tokens authentication is enabled)
+                //                                                                              //   {study-resource-token/viewer-instant-link}, {study-resource-token/meddream-instant-link}
+                //                                                                              // For "bulkd-study" level:
+                //                                                                              //   {CommaSeparatedUUIDs} is a comma separated list of the orthanc IDs of the selected studies "abc...,bcd..."
+                //                                                                              //   {CommaSeparatedDicomIds} is a comma separated list of the StudyInstanceUIDs of the selected studies "1.2.3,2.3.4"
+                //                                                                              //   {studies-resource-token/download-instant-link} is replaced by a token that is valid to download the selected studies (if tokens authentication is enabled)
+                //                                                                              //   {studies-resource-token/viewer-instant-link}, {studies-resource-token/meddream-instant-link}
                 // },
                 // Example for a POST button:
                 // {
@@ -316,10 +410,15 @@
                 //     "Icon": "bi-broadcast",
                 //     "Url": "../../my-python-plugin/{UUID}/process",
                 //     "Payload": {                                         // The payload template to include in the POST request
-                //         "id": "{UUID}",
-                //         "patient-name": "{PatientName}"
+                //                                                          // For "study", "instance" & "series" level:
+                //         "id": "{UUID}",                                  //   {UUID} is the orthanc ID of the resource.
+                //         "patient-name": "{PatientName}",                 //   {DicomTag} values are replaced in the template string. 
+                //                                                          // For "bulk-studies" level:
+                //         "orthanc-ids": "{JsonArrayUUIDs}",               //   this will be replaced by a json array with the Orthanc IDS of the selected studies ("orthanc-ids": ["abc...", "bcd..."])
+                //         "dicom-ids": "{JsonArrayDicomIds}",              //   this will be replaced by a json array with the StudyInstanceUIDs of the selected studies ("dicom-ids": ["1.2.3", "2.3.4"])
                 //     },
-                //     "Refresh": true                                      // Refresh the resource in the UI after having received the answer from the POST request
+                //     "Refresh": true,                                     // Refresh the resource in the UI after having received the answer from the POST request
+                //     "StartMessage": "my action has started"              // A custom message to display in an ephemeral notification (aka Toast message)
                 // },
                 // Example for a PUT button:
                 // {
@@ -349,6 +448,26 @@
             "InstantLinksValidity": 200,                // the duration, in seconds an 'instant' token is valid (e.g. used to download a study, open a study in a viewer)
             "ShareType": "stone-viewer-publication"     // allowed values: "stone-viewer-publication", "osimis-viewer-publication", "meddream-viewer-publication", "volview-viewer-publication"
             //"RequiredForLinks": false                 // Set it to false when using basic-auth together with the auth-plugin (https://discourse.orthanc-server.org/t/user-based-access-control-with-label-based-resource-access/5454)
+
+            // When opening a share link, the user actually lands on the token "landing" page.  By default, it will be redirected to the viewer directly.
+            // However, if you set "LandingOptions", you may display a landing page with e.g: a download button and a link to open the viewer.
+            // Optionally, you can also add a custom button to open custom link.
+            // "LandingOptions" : [
+            //     {
+            //         "Type" : "open-viewer-button"                            // Valid values are "open-viewer-button", "download-study" and "custom"
+            //     },
+            //     {
+            //         "Type" : "download-study"
+            //     },
+            //     {
+            //         "Type": "custom",
+            //         "Id": "custom-download-as-jpeg",                         // A unique HTML identifier for the button 
+            //         "Icon": "bi bi-filetype-jpg",                            // The CSS class that defines the button icon (only from bootstrap icons)
+            //         "Title": "Download study as jpeg",                       // The Title to display on the button
+            //         "Url": "../../studies/{UUID}/download-as-jpeg?token={token}", // The Url to open when the button is clicked.  Note: the url is relative to /ui/app/token-landing.html
+            //         "EnableForMultipleResources": false                      // Should this button be enabled when the token relates to multiple studies ? (default: false)
+            //     }
+            // ]
         },
 
         // Very specific advanced options
@@ -359,7 +478,74 @@
             // So, if you need the 'download-instant-link's to use auth headers, you can set this option to true.
             // OE2 will then display a "Save As" dialog (for security reasons, the browser can not initiate writing to local disk without a user interaction)
             // and the HTTP response will stream to disk.  Note that this might not work on all browsers.
-            "DownloadInstantLinksUseRestApiWithAuthHeaders": false    
-        }
+            "DownloadInstantLinksUseRestApiWithAuthHeaders": false,
+
+            // if Keycloak is disabled and if tokens are being passed in the OE2 query arguments (?token=tutu),
+            // this configuration tells OE2 which query arguments to re-used when opening a viewer or when
+            // downloading a resource (aka 'viewer-instant-link' and 'download-instant-link')
+            //"InstantLinksReuseTokenFromUri": "token",
+            
+            // By default, on ReadOnly systems, many UI components are disabled (like upload, delete, modify, ...).
+            // However, on very specific cases, some users might want to have the full UI available although the
+            // system is ReadOnly; this can be achived by setting AdaptUiOnReadOnlySystems to false.
+            "AdaptUiOnReadOnlySystems": true
+        },
+
+        // Configure the /ui/app/inbox.html page where users can fill a form and drop files that are then processed by a custom plugin (that you need to provide).
+        // Check this repo for a real life sample: https://github.com/orthanc-team/orthanc-auth-service/tree/main/minimal-setup/keycloak-inbox
+        "Inbox": {
+            "Enable": false,
+            
+            // If Keycloack is enabled, this configuration allows unauthenticated users to access the inbox page.
+            "EnableAnonymousAccess": false,
+            
+            // Title to display on the inbox page
+            "Title": "Welcome on the Orthanc inbox",
+            
+            // Various texts to display on the inbox page
+            "IntroTextHtml": "<p>Welcome to this inbox.</p><p>First fill the form and once all fields are valid, upload your DICOM files.</p><p>Wait for the processing to complete.</p>",
+            "SuccessTextHtml": "<p>All files have been processed successfully.</p><p></p>",
+            "FailureTextHtml": "<p>A problem occurred while processing the DICOM Files.</p><p>Please try again or contact the administrator</p>",
+            
+            // The route that is called after all files have been uploaded.  You must implement it in a plugin.  Check the sample repo for a real life example.
+            // "CommitUrl": "../../plugins/inbox/commit",
+            
+            // The route that is called to validate the form.  You must implement it in a plugin.  Check the sample repo for a real life example.
+            // "FormValidationUrl": "../../plugins/inbox/validate-form",
+            
+            // The route that is called to display the process progress.  You must implement it in a plugin.  Check the sample repo for a real life example.
+            // "ProcessingMonitoringUrl": "../../plugins/inbox/monitor-processing",
+            
+            // Define the form fields that the user must fill before uploading the files
+            // "FormFields": [
+            //{
+            //     "Type" : "Text",  // A standard text field
+            //     "Title": "Subject ID",
+            //     "Id": "SubjectId",
+            //     "Placeholder": "ex: SUB-253"
+            // }, {
+            //     "Type" : "Choice", // A drop-down box
+            //     "Title": "Visit ID",
+            //     "Id": "VisitId",
+            //     "Choices": ["T0", "T0 + 6 months", "T0 + 12 months", "T0 + 18 months", "T0 + 24 months"],
+            //     "Placeholder": "Select a visit"
+            // }, {
+            //     "Type" : "UserGroupsChoice", // A drop-down allowing to select one of the groups from the user profile
+            //     "Title": "Site ID",
+            //     "Id": "SiteId",
+            //     "GroupsRegex": "\/site-groups-(.*)",  // e.g: if group is "/site-groups-hospital-a", "hospital-a" is captured and displayed
+            //     "Placeholder": "Select your site"
+            // }, {
+            //     "Type" : "MultilineText", // A multiline form
+            //     "Title": "Comments",
+            //     "Id": "Comments",
+            //     "Placeholder": "Any comments ?"
+            // }, {
+            //     "Type" : "File",  // An upload button to select a file
+            //     "Title": "PDF form",
+            //     "Id": "PdfForm"
+            // }
+        // ]
+      }
     }
 }

@@ -46,6 +46,7 @@ bool hasUserProfile_ = false;
 bool openInOhifV3IsExplicitelyDisabled = false;
 bool enableShares_ = false;
 bool isReadOnly_ = false;
+bool hasAuditLogs_ = false;
 std::string customCssPath_;
 std::string theme_ = "light";
 std::string customLogoPath_;
@@ -218,11 +219,6 @@ void RedirectRoot(OrthancPluginRestOutput* output,
   }
   else
   {
-    for (uint32_t i = 0; i < request->headersCount; ++i)
-    {
-      OrthancPlugins::LogError(std::string(request->headersKeys[i]) + " : " + request->headersValues[i]);
-    }
-
     std::string oe2BaseApp = oe2BaseUrl_ + "app/";
     OrthancPluginRedirect(context, output, &(oe2BaseApp.c_str()[1]));  // remove the first '/' to make a relative redirect !
   }
@@ -300,7 +296,7 @@ void ReadConfiguration()
     if (jsonConfig.isMember("CustomCssPath") && jsonConfig["CustomCssPath"].isString())
     {
       customCssPath_ = jsonConfig["CustomCssPath"].asString();
-      if (!Orthanc::SystemToolbox::IsExistingFile(customCssPath_))
+      if (!Orthanc::SystemToolbox::IsRegularFile(customCssPath_))
       {
         LOG(ERROR) << "Unable to accesss the 'CustomCssPath': " << customCssPath_;
         throw Orthanc::OrthancException(Orthanc::ErrorCode_InexistentFile);
@@ -310,7 +306,7 @@ void ReadConfiguration()
     if (jsonConfig.isMember("CustomLogoPath") && jsonConfig["CustomLogoPath"].isString())
     {
       customLogoPath_ = jsonConfig["CustomLogoPath"].asString();
-      if (!Orthanc::SystemToolbox::IsExistingFile(customLogoPath_))
+      if (!Orthanc::SystemToolbox::IsRegularFile(Orthanc::SystemToolbox::PathFromUtf8(customLogoPath_)))
       {
         LOG(ERROR) << "Unable to accesss the 'CustomLogoPath': " << customLogoPath_;
         throw Orthanc::OrthancException(Orthanc::ErrorCode_InexistentFile);
@@ -330,7 +326,7 @@ void ReadConfiguration()
     if (jsonConfig.isMember("CustomFavIconPath") && jsonConfig["CustomFavIconPath"].isString())
     {
       customFavIconPath_ = jsonConfig["CustomFavIconPath"].asString();
-      if (!Orthanc::SystemToolbox::IsExistingFile(customFavIconPath_))
+      if (!Orthanc::SystemToolbox::IsRegularFile(Orthanc::SystemToolbox::PathFromUtf8(customFavIconPath_)))
       {
         LOG(ERROR) << "Unable to accesss the 'CustomFavIconPath': " << customFavIconPath_;
         throw Orthanc::OrthancException(Orthanc::ErrorCode_InexistentFile);
@@ -346,6 +342,14 @@ void ReadConfiguration()
   enableShares_ = pluginJsonConfiguration_["UiOptions"]["EnableShares"].asBool(); // we are sure that the value exists since it is in the default configuration file
   
   isReadOnly_ = orthancFullConfiguration_->GetBooleanValue("ReadOnly", false);
+
+  if (orthancFullConfiguration_->IsSection("Authorization"))
+  {
+    OrthancPlugins::OrthancConfiguration authPluginConfiguration(false);
+    orthancFullConfiguration_->GetSection(authPluginConfiguration, "Authorization");
+
+    hasAuditLogs_ = authPluginConfiguration.GetBooleanValue("EnableAuditLogs", false);
+  }
 }
 
 bool GetPluginConfiguration(Json::Value& jsonPluginConfiguration, const std::string& sectionName)
@@ -393,6 +397,29 @@ Json::Value GetKeycloakConfiguration()
     if (keyCloakSection.isMember("Enable") && keyCloakSection["Enable"].asBool() == true)
     {
       return pluginJsonConfiguration_["Keycloak"];
+    }
+  }
+
+  return Json::nullValue;
+}
+
+Json::Value GetTokenLandingConfiguration()
+{
+  if (pluginJsonConfiguration_.isMember("Tokens") && pluginJsonConfiguration_["Tokens"].isMember("LandingOptions"))
+  {
+    return pluginJsonConfiguration_["Tokens"]["LandingOptions"];
+  }
+
+  return Json::nullValue;
+}
+
+Json::Value GetInboxConfiguration()
+{
+  if (pluginJsonConfiguration_.isMember("Inbox"))
+  {
+    if (pluginJsonConfiguration_["Inbox"].isMember("Enable") && pluginJsonConfiguration_["Inbox"]["Enable"].asBool())
+    {
+      return pluginJsonConfiguration_["Inbox"];
     }
   }
 
@@ -450,6 +477,10 @@ Json::Value GetPluginsConfiguration(bool& hasUserProfile)
       {
         LOG(WARNING) << "When using OE2 and the authorization plugin together, you must set 'Authorization.CheckedLevel' to 'studies'.  Unless you are using this orthanc only to generate tokens.";
       }
+    }
+    else if (pluginName == "advanced-storage")
+    {
+      pluginsConfiguration[pluginName]["Enabled"] = IsPluginEnabledInConfiguration("AdvancedStorage", "Enable", false);
     }
     else if (pluginName == "AWS S3 Storage")
     {
@@ -550,6 +581,10 @@ Json::Value GetPluginsConfiguration(bool& hasUserProfile)
       pluginsConfiguration[pluginName]["Enabled"] = true;
     }
     else if (pluginName == "worklists")
+    {
+      pluginsConfiguration[pluginName]["Enabled"] = IsPluginEnabledInConfiguration("Worklists", "Enable", false);
+    }
+    else if (pluginName == "orthanc-worklists")
     {
       pluginsConfiguration[pluginName]["Enabled"] = IsPluginEnabledInConfiguration("Worklists", "Enable", false);
     }
@@ -677,6 +712,7 @@ void GetOE2Configuration(OrthancPluginRestOutput* output,
         UpdateUiOptions(uiOptions["EnableViewerQuickButton"], permissions, "all|view");
         UpdateUiOptions(uiOptions["EnableReportQuickButton"], permissions, "all|view");
         UpdateUiOptions(uiOptions["EnableUpload"], permissions, "all|upload");
+        UpdateUiOptions(uiOptions["EnableAuditLogs"], permissions, "admin-permissions|audit-logs");
         UpdateUiOptions(uiOptions["EnableAddSeries"], permissions, "all|upload");
         UpdateUiOptions(uiOptions["EnableDicomModalities"], permissions, "all|q-r-remote-modalities");
         UpdateUiOptions(uiOptions["EnableDeleteResources"], permissions, "all|delete");
@@ -688,6 +724,7 @@ void GetOE2Configuration(OrthancPluginRestOutput* output,
         UpdateUiOptions(uiOptions["EnableSendTo"], permissions, "all|send");
         UpdateUiOptions(uiOptions["EnableApiViewMenu"], permissions, "all|api-view");
         UpdateUiOptions(uiOptions["EnableSettings"], permissions, "all|settings");
+        UpdateUiOptions(uiOptions["EnableWorklists"], permissions, "all|worklists");
         UpdateUiOptions(uiOptions["EnableShares"], permissions, "all|share");
         UpdateUiOptions(uiOptions["EnableEditLabels"], permissions, "all|edit-labels");
         UpdateUiOptions(uiOptions["EnablePermissionsEdition"], permissions, "admin-permissions");
@@ -697,11 +734,12 @@ void GetOE2Configuration(OrthancPluginRestOutput* output,
 
         oe2Configuration["Profile"] = userProfile;
       }
-
     }
 
+    bool adaptUiOnReadOnlySystems = oe2Configuration["AdvancedOptions"]["AdaptUiOnReadOnlySystems"].asBool();
+
     // disable operations on read only systems
-    if (isReadOnly_)
+    if (isReadOnly_ && adaptUiOnReadOnlySystems)
     {
       uiOptions["EnableUpload"] = false;
       uiOptions["EnableAddSeries"] = false;
@@ -712,8 +750,10 @@ void GetOE2Configuration(OrthancPluginRestOutput* output,
       uiOptions["EnablePermissionsEdition"] = false;
     }
 
-
     oe2Configuration["Keycloak"] = GetKeycloakConfiguration();
+
+    uiOptions["EnableAuditLogs"] = uiOptions["EnableAuditLogs"].asBool() && hasAuditLogs_;
+
     std::string answer = oe2Configuration.toStyledString();
     OrthancPluginAnswerBuffer(context, output, answer.c_str(), answer.size(), "application/json");
   }
@@ -733,6 +773,8 @@ void GetOE2PreLoginConfiguration(OrthancPluginRestOutput* output,
   {
     Json::Value oe2Configuration;
     oe2Configuration["Keycloak"] = GetKeycloakConfiguration();
+    oe2Configuration["TokensLandingOptions"] = GetTokenLandingConfiguration();
+    oe2Configuration["Inbox"] = GetInboxConfiguration();
 
     std::string answer = oe2Configuration.toStyledString();
     OrthancPluginAnswerBuffer(context, output, answer.c_str(), answer.size(), "application/json");
@@ -851,6 +893,9 @@ extern "C"
         OrthancPlugins::RegisterRestCallback
           <ServeEmbeddedFile<Orthanc::EmbeddedResources::WEB_APPLICATION_INDEX_RETRIEVE_AND_VIEW, Orthanc::MimeType_Html> >
           (oe2BaseUrl_ + "app/retrieve-and-view.html", true);
+        OrthancPlugins::RegisterRestCallback
+          <ServeEmbeddedFile<Orthanc::EmbeddedResources::WEB_APPLICATION_INBOX, Orthanc::MimeType_Html> >
+          (oe2BaseUrl_ + "app/inbox.html", true);
         
         if (customFavIconPath_.empty())
         {

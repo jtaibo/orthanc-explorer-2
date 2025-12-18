@@ -1,7 +1,8 @@
 <script>
 import StudyItem from "./StudyItem.vue"
 import ResourceButtonGroup from "./ResourceButtonGroup.vue"
-import LabelsEditor from "./LabelsEditor.vue";
+import LabelsEditor from "./LabelsEditor.vue"
+import Toasts from "./Toasts.vue"
 
 import { mapState, mapGetters } from "vuex"
 import { baseOe2Url } from "../globalConfigurations"
@@ -14,6 +15,13 @@ import { ref } from 'vue';
 import SourceType from "../helpers/source-type";
 import { ObserveVisibility as vObserveVisibility } from 'vue3-observe-visibility'
 import { nextTick } from 'vue'
+
+const Status = Object.freeze({
+    UNDEFINED: 0,
+    LOADING_MOST_RECENT_STUDIES: 1,
+    DISPLAYING_MOST_RECENT_STUDIES: 2,
+    DISPLAYING_FILTERED_STUDIES: 3,
+});
 
 document._allowedFilters = ["StudyDate", "StudyTime", "AccessionNumber", "PatientID", "PatientSex", "PatientName", "PatientBirthDate", "StudyInstanceUID", "StudyID", "StudyDescription", "ModalitiesInStudy", "labels"]
 
@@ -70,7 +78,39 @@ document._studyColumns = {
     "undefined": {
         "width": "10%",
         "isOrderable": false
+    },
+    // columns that are not included by default but that are commonly added
+    "PatientSex": {
+        "width": "7%",
+        "placeholder": "",
+        "isOrderable": true
+    },
+    "OtherPatientIDs": {
+        "width": "10%",
+        "placeholder": "",
+        "isOrderable": true
+    },
+    "InstitutionName": {
+        "width": "12%",
+        "placeholder": "",
+        "isOrderable": true
+    },
+    "ReferringPhysician": {
+        "width": "10%",
+        "placeholder": "",
+        "isOrderable": true
+    },
+    "RequestingPhysician": {
+        "width": "10%",
+        "placeholder": "",
+        "isOrderable": true
+    },
+    "ManufacturerModelName": {
+        "width": "10%",
+        "placeholder": "",
+        "isOrderable": true
     }
+
 };
 
 export default {
@@ -99,10 +139,9 @@ export default {
             datePickerPresetRanges: document._datePickerPresetRanges,
             allSelected: false,
             isPartialSelected: false,
-            latestStudiesIds: [],
-            shouldStopLoadingLatestStudies: false,
-            isLoadingLatestStudies: false,
-            isDisplayingLatestStudies: false,
+            mostRecentStudiesIds: [],
+            shouldStopLoadingMostRecentStudies: false,
+            status: Status.UNDEFINED,
             sourceType: SourceType.LOCAL_ORTHANC,
             remoteSource: null,
             showMultiLabelsFilter: false,
@@ -113,6 +152,7 @@ export default {
     computed: {
         ...mapState({
             uiOptions: state => state.configuration.uiOptions,
+            allLabels: state => state.labels.allLabels,
             isConfigurationLoaded: state => state.configuration.loaded,
             studiesIds: state => state.studies.studiesIds,
             selectedStudiesIds: state => state.studies.selectedStudiesIds,
@@ -123,6 +163,7 @@ export default {
         }),
         ...mapGetters([
             'studies/isFilterEmpty',                // -> this['studies/isFilterEmpty']
+            'studies/isMostRecentOrdering',         // -> this['studies/isMostRecentOrdering']
         ]),
         notShowingAllResults() {
             if (this.sourceType == SourceType.LOCAL_ORTHANC && !this.hasExtendedFind) {
@@ -133,6 +174,12 @@ export default {
             } else {
                 return false;
             }
+        },
+        isDisplayingMostRecentStudies() {
+            return this.status == Status.DISPLAYING_MOST_RECENT_STUDIES;
+        },
+        isLoadingMostRecentStudies() {
+            return this.status == Status.LOADING_MOST_RECENT_STUDIES;
         },
         isDarkMode() {
             // hack to switch the theme: get the value from our custom css
@@ -166,7 +213,7 @@ export default {
         },
         showEmptyStudyListIfNoSearch() {
             if (this.sourceType == SourceType.LOCAL_ORTHANC) {
-                return !this.hasExtendedFind && this.uiOptions.StudyListContentIfNoSearch == "empty";
+                return this.uiOptions.StudyListContentIfNoSearch == "empty";
             } else {
                 return true;
             }
@@ -191,26 +238,55 @@ export default {
             }
         },
         colSpanBeforeMultiLabelsFilter() {
-            if (this.hasPrimaryViewerIcon && this.hasPdfReportIcon) {
-                return 3;
-            } else {
-                return 2;
+            let span = 1; // the select study col
+
+            if (this.hasPrimaryViewerIcon) {
+                span++;
+            } 
+            if (this.hasPdfReportIcon) {
+                span++;
             }
+            return span;
         },
         colSpanMultiLabelsFilter() {
-            let totalColumnsCount = this.uiOptions.StudyListColumns.length + 1; // +1 for selection box
-            if (this.hasPrimaryViewerIcon) {
-                totalColumnsCount++;
+            if (this.uiOptions && this.uiOptions.StudyListColumns) {
+                let totalColumnsCount = this.uiOptions.StudyListColumns.length+1; // +1 for selection box
+                if (this.hasPrimaryViewerIcon) {
+                    totalColumnsCount++;
+                }
+                if (this.hasPdfReportIcon) {
+                    totalColumnsCount++;
+                }
+                return totalColumnsCount - this.colSpanBeforeMultiLabelsFilter - this.colSpanAfterMultiLabelsFilter;
+            } else {
+                return 4; // temporary until the uiOptions have been loaded
             }
-            if (this.hasPdfReportIcon) {
-                totalColumnsCount++;
-            }
-            return totalColumnsCount - this.colSpanBeforeMultiLabelsFilter - this.colSpanAfterMultiLabelsFilter;
         },
         colSpanAfterMultiLabelsFilter() {
             return 3;
         },
+        widthColum1() {
+            if (this.colSpanClearFilter == 1) {
+                return "4%";
+            } else {
+                return "2%";
+            }
+        },
+        colSpanClearFilter() {
+            if (this.sourceType != SourceType.LOCAL_ORTHANC) {
+                return 1;
+            }
 
+            let span = 1;
+            if (this.hasPrimaryViewerIcon) {
+                span++;
+            }
+            if (this.hasPdfReportIcon) {
+                span++;
+            }
+
+            return span;
+        }
     },
     watch: {
         '$route': async function () { // the watch is used when, e.g, clicking on the back button
@@ -280,12 +356,22 @@ export default {
             // console.log("watch filterPatientBirthDateForDatePicker", newValue, dicomNewValue);
             this.filterPatientBirthDate = dicomNewValue;
         },
+        async multiLabelsFilterLabelsConstraint(newValue, oldValue) {
+            if (this.isSearchAsYouTypeEnabled) {
+                await this.$store.dispatch('studies/updateLabelFilterNoReload', { labels: this.filterLabels, constraint: this.multiLabelsFilterLabelsConstraint });
+                this.updateUrlNoReload();
+                this.reloadStudyList();
+            }
+        },
         selectedStudiesIds: {
             handler(oldValue, newValue) {
                 this.updateSelectAll();
             },
             deep: true
         },
+        allLabels(newValue, oldValue) {
+            this.multiLabelsComponentKey++; // force refresh the multi-labels filter component
+        }
     },
     async created() {
         this.messageBus.on('language-changed', this.translateDatePicker);
@@ -296,7 +382,6 @@ export default {
     },
     async mounted() {
         this.updateSelectAll();
-        this.updateFilterFromRoute(this.$route.query);
     },
     methods: {
         updateSelectAll() {
@@ -790,8 +875,26 @@ export default {
         },
         async reloadStudyList() {
             if (this.sourceType == SourceType.LOCAL_ORTHANC && this.hasExtendedFind) {
-                await this.$store.dispatch('studies/clearStudies');
-                await this.$store.dispatch('studies/reloadFilteredStudies');
+                if (this.uiOptions.StudyListContentIfNoSearch == "empty") {
+                    this.status = Status.UNDEFINED;
+                    if (this['studies/isFilterEmpty']) {
+                        await this.$store.dispatch('studies/clearStudies');
+                    } else {
+                        await this.$store.dispatch('studies/clearStudies');
+                        await this.$store.dispatch('studies/reloadFilteredStudies');
+                    }
+                } else {
+                    if (this['studies/isMostRecentOrdering']) {
+                        this.status = Status.LOADING_MOST_RECENT_STUDIES;
+                    }
+                    await this.$store.dispatch('studies/clearStudies');
+                    await this.$store.dispatch('studies/reloadFilteredStudies');
+                    if (this['studies/isMostRecentOrdering']) {
+                        this.status = Status.DISPLAYING_MOST_RECENT_STUDIES;
+                    } else {
+                        this.status = Status.DISPLAYING_FILTERED_STUDIES;
+                    }
+                }
             } else {
                 // if we are displaying most recent studies and there is only a label filter -> continue to show the list of most recent studies (filtered by label)
                 const shouldShowMostRecentsWithLabel = this.uiOptions.StudyListContentIfNoSearch == "most-recents" && this.isFilteringOnlyOnLabels();
@@ -808,27 +911,24 @@ export default {
                     } else if (this.uiOptions.StudyListContentIfNoSearch == "most-recents") {
                         // legacy code
 
-                        if (this.isLoadingLatestStudies) {
+                        if (this.status == Status.LOADING_MOST_RECENT_STUDIES) {
                             // if currently loading, stop it
-                            this.shouldStopLoadingLatestStudies = true;
-                            this.isLoadingLatestStudies = false;
-                            this.isDisplayingLatestStudies = true;
+                            this.shouldStopLoadingMostRecentStudies = true;
+                            this.status = Status.DISPLAYING_MOST_RECENT_STUDIES;
                         }
                         // restart loading 
                         const lastChangeId = await api.getLastChangeId();
                     
                         await this.$store.dispatch('studies/clearStudies');
-                        this.latestStudiesIds = new Set();
-                        this.shouldStopLoadingLatestStudies = false;
-                        this.isLoadingLatestStudies = true;
-                        this.isDisplayingLatestStudies = false;
+                        this.mostRecentStudiesIds = new Set();
+                        this.shouldStopLoadingMostRecentStudies = false;
+                        this.status = Status.LOADING_MOST_RECENT_STUDIES;
 
                         this.loadStudiesFromChange(lastChangeId, 1000);
                     }
                 } else {
-                    this.shouldStopLoadingLatestStudies = true;
-                    this.isLoadingLatestStudies = false;
-                    this.isDisplayingLatestStudies = false;
+                    this.shouldStopLoadingMostRecentStudies = true;
+                    this.status = Status.UNDEFINED;
                     await this.$store.dispatch('studies/reloadFilteredStudies');
                 }
             }
@@ -847,8 +947,8 @@ export default {
             for (let change of changes) {
                 // Take the first event we find -> we see last uploaded data immediately (NewStudy but no StableStudy).  
                 // An updated study that has received a new series is visible as well (its NewStudy might be too old but the StableStudy brings it back on top of the list)
-                if ((change["ChangeType"] == "NewStudy" || change["ChangeType"] == "StableStudy") && !this.latestStudiesIds.has(change["ID"])) {
-                    if (this.shouldStopLoadingLatestStudies) {
+                if ((change["ChangeType"] == "NewStudy" || change["ChangeType"] == "StableStudy") && !this.mostRecentStudiesIds.has(change["ID"])) {
+                    if (this.shouldStopLoadingMostRecentStudies) {
                         return;
                     }
                     //console.log(change);
@@ -858,10 +958,9 @@ export default {
                             this.$store.dispatch('studies/addStudy', { studyId: change["ID"], study: study, reloadStats: false });
                         }
 
-                        this.latestStudiesIds.add(change["ID"]);
-                        if (this.latestStudiesIds.size == this.uiOptions.MaxStudiesDisplayed) {
-                            this.isLoadingLatestStudies = false;
-                            this.isDisplayingLatestStudies = true;
+                        this.mostRecentStudiesIds.add(change["ID"]);
+                        if (this.mostRecentStudiesIds.size == this.uiOptions.MaxStudiesDisplayed) {
+                            this.status = Status.DISPLAYING_MOST_RECENT_STUDIES;
                             return;
                         }
                     } catch (err) {
@@ -869,8 +968,8 @@ export default {
                     }
                 }
             }
-            if (!this.shouldStopLoadingLatestStudies) {
-                if (this.latestStudiesIds.size < this.statistics.CountStudies) {
+            if (!this.shouldStopLoadingMostRecentStudies) {
+                if (this.mostRecentStudiesIds.size < this.statistics.CountStudies) {
                     if (this.hasExtendedChanges) {
                         if (!changesResponse["Done"]) {
                             setTimeout(() => {this.loadStudiesFromChange(changesResponse["First"], 1000)}, 1);
@@ -881,12 +980,10 @@ export default {
                         }
                     }
                 } else {
-                    this.isLoadingLatestStudies = false;
-                    this.isDisplayingLatestStudies = true;
+                    this.status = Status.DISPLAYING_MOST_RECENT_STUDIES;                    
                 }
             } else {
-                this.isLoadingLatestStudies = false;
-                this.isDisplayingLatestStudies = true;
+                this.status = Status.DISPLAYING_MOST_RECENT_STUDIES;
             }
         },
         onDeletedStudy(studyId) {
@@ -903,9 +1000,13 @@ export default {
         },
         onMultiLabelsFilterChanged(newValues) {
             this.filterLabels = newValues;
+            if (this.isSearchAsYouTypeEnabled) {
+                this.updateUrlNoReload();
+                this.reloadStudyList();
+            }
         }
     },
-    components: { StudyItem, ResourceButtonGroup, LabelsEditor }
+    components: { StudyItem, ResourceButtonGroup, LabelsEditor, Toasts }
 }
 </script>
 
@@ -921,9 +1022,9 @@ export default {
         <table class="table table-sm study-table table-borderless">
             <thead class="sticky-top">
                 <tr class="study-column-titles">
-                    <th width="2%" scope="col" ></th>
-                    <th v-if="hasPrimaryViewerIcon" width="4%" scope="col" ></th>
-                    <th v-if="hasPdfReportIcon" width="4%" scope="col" ></th>
+                    <th :width="widthColum1" max-width="40px" scope="col"></th>
+                    <th v-if="hasPrimaryViewerIcon" width="2%" max-width="30px" scope="col" ></th>
+                    <th v-if="hasPdfReportIcon" width="2%" max-width="30px" scope="col" ></th>
                     <th v-for="columnTag in uiOptions.StudyListColumns" :key="columnTag" data-bs-toggle="tooltip"
                         v-bind:title="columnTooltip(columnTag)" v-bind:width="columnWidth(columnTag)"
                         class="study-table-title">
@@ -936,14 +1037,12 @@ export default {
                     </th>
                 </tr>
                 <tr class="study-table-filters" v-on:keyup.enter="search">
-                    <th scope="col">
-                        <button @click="clearFilters" type="button" class="form-control study-list-filter btn filter-button"
+                    <th scope="col" :colspan="colSpanClearFilter">
+                        <button @click="clearFilters" type="button" class="form-control study-list-filter btn filter-button btn-sm"
                             data-bs-toggle="tooltip" title="Clear filter">
                             <i class="fa-regular fa-circle-xmark"></i>
                         </button>
                     </th>
-                    <th v-if="hasPrimaryViewerIcon" scope="col" ></th>
-                    <th v-if="hasPdfReportIcon" scope="col" ></th>
                     <th v-for="columnTag in uiOptions.StudyListColumns" :key="columnTag">
                         <div v-if="columnTag == 'StudyDate'">
                             <Datepicker v-if="columnTag == 'StudyDate'" v-model="filterStudyDateForDatePicker"
@@ -1013,28 +1112,28 @@ export default {
                     </th>
                 </tr>
                 <tr class="study-table-actions">
-                    <th width="2%" scope="col">
+                    <th width="2%" :colspan="colSpanBeforeMultiLabelsFilter" scope="col">
                         <div class="form-check" style="margin-left: 0.5rem">
                             <input class="form-check-input" type="checkbox" v-model="allSelected"
                                 :indeterminate="isPartialSelected" @click="clickSelectAll"><span style="font-weight: 400; font-size: small;">{{ selectedStudiesCount }}</span>
                         </div>
                     </th>
-                    <th width="98%" colspan="10" scope="col">
-                        <div class="container">
+                    <th width="98%" :colspan="colSpanMultiLabelsFilter + colSpanAfterMultiLabelsFilter" scope="col">
+                        <div class="container px-0">
                             <div class="row g-1">
                                 <div class="col-6 study-list-bulk-buttons">
-                                    <ResourceButtonGroup :resourceLevel="'bulk'">
+                                    <ResourceButtonGroup :resourceLevel="'bulk'" smallIcons="true">
                                     </ResourceButtonGroup>
                                 </div>
                                 <div class="col-4">
-                                    <div v-if="!isSearching && isLoadingLatestStudies" class="alert alert-secondary study-list-alert" role="alert">
-                                        <span v-if="isLoadingLatestStudies" class="spinner-border spinner-border-sm alert-icon" role="status"
+                                    <div v-if="!isSearching && isLoadingMostRecentStudies" class="alert alert-secondary study-list-alert" role="alert">
+                                        <span v-if="isLoadingMostRecentStudies" class="spinner-border spinner-border-sm alert-icon" role="status"
                                             aria-hidden="true"></span>{{
-                                                $t('loading_latest_studies') }}
+                                                $t('loading_most_recent_studies') }}
                                     </div>
-                                    <div v-else-if="!isSearching && isDisplayingLatestStudies" class="alert alert-secondary study-list-alert" role="alert">
+                                    <div v-else-if="!isSearching && isDisplayingMostRecentStudies" class="alert alert-secondary study-list-alert" role="alert">
                                         <i class="bi bi-exclamation-triangle-fill alert-icon"></i>{{
-                                                $t('displaying_latest_studies') }}
+                                                $t('displaying_most_recent_studies') }}
                                     </div>
                                     <div v-else-if="!isSearching && notShowingAllResults" class="alert alert-danger study-list-alert"
                                         role="alert">
@@ -1073,8 +1172,8 @@ export default {
             <StudyItem v-for="studyId in studiesIds" :key="studyId" :id="studyId" :studyId="studyId" v-observe-visibility="{callback: visibilityChanged, once: true}"
                 @deletedStudy="onDeletedStudy">
             </StudyItem>
-
         </table>
+        <Toasts/>
     </div>
 </template>
 
@@ -1141,6 +1240,7 @@ button.form-control.study-list-filter {
 } */
 
 .study-table {
+  table-layout: fixed;
 }
 
 .study-table> :nth-child(odd) >tr >td{
@@ -1276,6 +1376,8 @@ button.form-control.study-list-filter {
     border-bottom: 0px;
     border-style: solid;
     border-color: var(--study-table-actions-bg-color);
+    text-overflow: ellipsis;
+    overflow: hidden; 
 }
 
 .is-orderable {

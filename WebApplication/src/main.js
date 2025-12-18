@@ -85,10 +85,11 @@ axios.get('../api/pre-login-configuration').then((config) => {
 
             // keycloak includes state, code and session_state -> the router does not like them -> remove them
             const params = new URLSearchParams(router.currentRoute.value.fullPath);
+            params.delete('session_state');
             params.delete('state');
             params.delete('code');
-            params.delete('session_state');
-            const cleanedRoute = decodeURIComponent(params.toString()).replace('/=', '/');
+            params.delete('iss');
+            const cleanedRoute = decodeURIComponent(params.toString()).replace(/=$/, ''); // remove trailing '='
             console.log("App mounted, moving to cleaned route ", cleanedRoute);
             await router.push(cleanedRoute);
 
@@ -101,7 +102,7 @@ axios.get('../api/pre-login-configuration').then((config) => {
                         localStorage.setItem("vue-refresh-token", window.keycloak.refreshToken);
                         orthancApi.updateAuthHeader();
                     } else {
-                        console.log('Token not refreshed, valid for '
+                        console.log('Token not refreshed, still valid for '
                             + Math.round(window.keycloak.tokenParsed.exp + window.keycloak.timeSkew - new Date().getTime() / 1000) + ' seconds');
                     }
                 }).catch(() => {
@@ -110,22 +111,29 @@ axios.get('../api/pre-login-configuration').then((config) => {
 
             }, 60000)
 
-        }).catch(() => {
-            console.log("Could not connect to Keycloak");
+        }).catch((e) => {
+            console.log("Could not connect to Keycloak", e);
         });
     } else {
-        // If there is a param with a token in the params, use it as a header in subsequent calls to the Orthanc API
-        const params = new URLSearchParams(window.location.search);
+        router.isReady().then(() => {
+            console.log("opening OE2 with router=", router.currentRoute.value);
+            // If there is a param with a token in the params, use it as a header in subsequent calls to the Orthanc API
 
-        for (let paramName of VALID_TOKEN_PARAMS) {
-            const paramValue = params.get(paramName);
+            for (let paramName of VALID_TOKEN_PARAMS) {
 
-            if (!paramValue) continue;
+                if (paramName in router.currentRoute.value.query) {
+                    const paramValue = router.currentRoute.value.query[paramName];
+                    if (!paramValue) {
+                        continue;
+                    }
 
-            localStorage.setItem(paramName, paramValue);
-            orthancApi.updateAuthHeader(paramName);
-        }
+                    console.log("found auth token in url: ", paramName, paramValue);
+                    localStorage.setItem(paramName, paramValue);
+                    orthancApi.updateAuthHeader(paramName);
+                }
+            }
 
-        app.mount('#app')
+            app.mount('#app');
+        });
     }
 });
