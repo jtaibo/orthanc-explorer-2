@@ -23,7 +23,6 @@ const Status = Object.freeze({
     DISPLAYING_FILTERED_STUDIES: 3,
 });
 
-
 document._allowedFilters = ["StudyDate", "StudyTime", "AccessionNumber", "PatientID", "PatientSex", "PatientName", "PatientBirthDate", "StudyInstanceUID", "StudyID", "StudyDescription", "ModalitiesInStudy", "labels"]
 
 document._studyColumns = {
